@@ -75,7 +75,7 @@ func main() {
 		saveConfig()
 	}
 
-	if err := forceSetColorDepth(cfg.DisplayID, uint32(cfg.DefaultBPC), bpcToDesktopDepth(cfg.DefaultBPC)); err != nil {
+	if err := forceSetColorDepth(cfg.DisplayID, uint32(cfg.DefaultBPC), ); err != nil {
 		logError("failed to set initial color depth: %v", err)
 	} else {
 		logInfo("initial color depth set to %d-bit", bpcToHumanBits(cfg.DefaultBPC))
@@ -85,7 +85,7 @@ func main() {
 
 	if running := getRunningExceptedProcesses(); len(running) > 0 {
 		logInfo("excepted process already running: %s -> switching to 10-bit", strings.Join(running, ", "))
-		if err := setColorDepth(cfg.DisplayID, uint32(cfg.GameBPC), bpcToDesktopDepth(cfg.GameBPC)); err != nil {
+		if err := setColorDepth(cfg.DisplayID, uint32(cfg.GameBPC), ); err != nil {
 			logError("failed to switch to game color depth: %v", err)
 		}
 		updateStatusText(true, running[0])
@@ -99,7 +99,7 @@ func main() {
 		configMu.Unlock()
 
 		if enable10Bit {
-			if err := setColorDepth(displayID, uint32(gameBPC), bpcToDesktopDepth(gameBPC)); err != nil {
+			if err := setColorDepth(displayID, uint32(gameBPC), ); err != nil {
 				logError("failed to switch to 10-bit: %v", err)
 			}
 			running := getRunningExceptedProcesses()
@@ -109,7 +109,7 @@ func main() {
 			}
 			updateStatusText(true, gameName)
 		} else {
-			if err := setColorDepth(displayID, uint32(defaultBPC), bpcToDesktopDepth(defaultBPC)); err != nil {
+			if err := setColorDepth(displayID, uint32(defaultBPC), ); err != nil {
 				logError("failed to switch to 8-bit: %v", err)
 			}
 			updateStatusText(false, "")
@@ -130,7 +130,7 @@ func main() {
 		defaultBPC := cfg.DefaultBPC
 		configMu.Unlock()
 
-		if err := forceSetColorDepth(displayID, uint32(defaultBPC), bpcToDesktopDepth(defaultBPC)); err != nil {
+		if err := forceSetColorDepth(displayID, uint32(defaultBPC), ); err != nil {
 			logError("failed to restore color depth on exit: %v", err)
 		} else {
 			logInfo("restored %d-bit color depth", bpcToHumanBits(defaultBPC))
@@ -198,17 +198,6 @@ func isValidDisplayID(displayID uint32) bool {
 		}
 	}
 	return false
-}
-
-func bpcToDesktopDepth(bpc int) uint32 {
-	switch bpc {
-	case nvBPC8:
-		return nvDesktopColorDepth8BPC
-	case nvBPC10:
-		return nvDesktopColorDepth10BPC
-	default:
-		return nvDesktopColorDepthDefault
-	}
 }
 
 func bpcToHumanBits(bpc int) int {

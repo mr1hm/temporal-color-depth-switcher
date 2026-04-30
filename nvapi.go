@@ -222,7 +222,7 @@ func getColorData(displayID uint32) (*nvColorDataV5, error) {
 	return &colorData, nil
 }
 
-func setColorDepth(displayID uint32, bpc uint32, depth uint32) error {
+func setColorDepth(displayID uint32, bpc uint32) error {
 	want10Bit := (bpc == nvBPC10)
 	if want10Bit == nvapi.isCurrently10Bit {
 		return nil
@@ -233,12 +233,8 @@ func setColorDepth(displayID uint32, bpc uint32, depth uint32) error {
 		return err
 	}
 
-	colorData.Version = nvColorDataV5Version
-	colorData.Size = uint16(unsafe.Sizeof(*colorData))
 	colorData.Cmd = nvColorCmdSet
 	colorData.BPC = bpc
-	colorData.Depth = depth
-	colorData.ColorSelectionPolicy = nvColorSelectionPolicyUser
 
 	ret, _, _ := syscall.SyscallN(nvapi.dispColorControl, uintptr(displayID), uintptr(unsafe.Pointer(colorData)))
 	if ret != 0 {
@@ -249,7 +245,7 @@ func setColorDepth(displayID uint32, bpc uint32, depth uint32) error {
 	return nil
 }
 
-func forceSetColorDepth(displayID uint32, bpc uint32, depth uint32) error {
+func forceSetColorDepth(displayID uint32, bpc uint32) error {
 	nvapi.isCurrently10Bit = !(bpc == nvBPC10)
-	return setColorDepth(displayID, bpc, depth)
+	return setColorDepth(displayID, bpc)
 }
