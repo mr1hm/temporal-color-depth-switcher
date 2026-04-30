@@ -53,10 +53,13 @@ var (
 )
 
 func onTrayReady() {
-	systray.SetTitle("Color Depth Switcher")
+	logInfo("onTrayReady called")
+	systray.SetIcon(generateTrayIcon())
+	logInfo("icon set")
 	systray.SetTooltip("Temporal Color Depth Switcher")
 
 	displays := nvapi.displays
+	logInfo("building menu for %d displays", len(displays))
 
 	displayMenu := systray.AddMenuItem("Display", "Select display")
 	displayItems = make([]*systray.MenuItem, len(displays))

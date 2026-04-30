@@ -33,6 +33,14 @@ var (
 )
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			setupLogging()
+			logError("PANIC: %v", r)
+			showErrorDialog(fmt.Sprintf("Fatal error: %v", r))
+		}
+	}()
+
 	if !enforceSingleInstance() {
 		return
 	}
@@ -118,6 +126,7 @@ func main() {
 	monitor.start()
 	logInfo("process monitor started")
 
+	logInfo("starting systray...")
 	systray.Run(onTrayReady, func() {
 		logInfo("shutting down...")
 
