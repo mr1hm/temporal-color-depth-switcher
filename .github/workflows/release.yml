@@ -24,14 +24,8 @@ jobs:
         with:
           go-version: "1.22"
 
-      - name: Install MinGW
-        run: choco install mingw -y
-
       - name: Build
-        env:
-          CGO_ENABLED: "1"
-          CC: gcc
-        run: go build -ldflags "-H windowsgui -s -w" -o temporal-color-depth-switcher.exe .
+        run: go build -ldflags "-s -w" -o temporal-color-depth-switcher.exe .
 
       - name: Package
         run: Compress-Archive -Path temporal-color-depth-switcher.exe,config.json -DestinationPath temporal-color-depth-switcher.zip
