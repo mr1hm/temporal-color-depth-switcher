@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"unsafe"
 
@@ -19,35 +20,42 @@ var (
 	procProcess32FirstW      = modKernel32.NewProc("Process32FirstW")
 	procProcess32NextW       = modKernel32.NewProc("Process32NextW")
 	procCloseHandle          = modKernel32.NewProc("CloseHandle")
+	procOpenProcess          = modKernel32.NewProc("OpenProcess")
+	procWaitForSingleObject  = modKernel32.NewProc("WaitForSingleObject")
 )
 
 const (
 	th32csSnapProcess = 0x00000002
 	maxPath           = 260
+	synchronize       = 0x00100000
+	infinite          = 0xFFFFFFFF
 )
 
 type processEntry32W struct {
-	Size              uint32
-	CntUsage          uint32
-	ProcessID         uint32
-	DefaultHeapID     uintptr
-	ModuleID          uint32
-	CntThreads        uint32
-	ParentProcessID   uint32
-	PriClassBase      int32
-	Flags             uint32
-	ExeFile           [maxPath]uint16
+	Size            uint32
+	CntUsage        uint32
+	ProcessID       uint32
+	DefaultHeapID   uintptr
+	ModuleID        uint32
+	CntThreads      uint32
+	ParentProcessID uint32
+	PriClassBase    int32
+	Flags           uint32
+	ExeFile         [maxPath]uint16
 }
 
 type processMonitor struct {
-	onColorSwitch func(enable10Bit bool)
-	quit          chan struct{}
+	onColorSwitch  func(enable10Bit bool)
+	quit           chan struct{}
+	activeGamePIDs map[uint32]string
+	mu             sync.Mutex
 }
 
 func newProcessMonitor(onColorSwitch func(bool)) *processMonitor {
 	return &processMonitor{
-		onColorSwitch: onColorSwitch,
-		quit:          make(chan struct{}),
+		onColorSwitch:  onColorSwitch,
+		quit:           make(chan struct{}),
+		activeGamePIDs: make(map[uint32]string),
 	}
 }
 
@@ -106,58 +114,9 @@ func (m *processMonitor) run() {
 	startEnum := startEnumRaw.ToIDispatch()
 	defer startEnum.Release()
 
-	stopQuery := "SELECT * FROM Win32_ProcessStopTrace"
-	stopEnumRaw, err := oleCallMethod(service, "ExecNotificationQuery", stopQuery)
-	if err != nil {
-		logError("WMI stop event subscription failed: %v", err)
-		return
-	}
-	stopEnum := stopEnumRaw.ToIDispatch()
-	defer stopEnum.Release()
-
 	logInfo("WMI process monitor started")
 
-	startEvents := make(chan string, 8)
-	stopEvents := make(chan string, 8)
-
-	go m.pollWMIEvents(startEnum, startEvents)
-	go m.pollWMIEvents(stopEnum, stopEvents)
-
-	for {
-		select {
-		case <-m.quit:
-			return
-		case processName := <-startEvents:
-			logInfo("process started: %s (excepted: %v)", processName, isExceptedProcess(processName))
-			if isExceptedProcess(processName) {
-				logInfo("game started: %s -> switching to 10-bit", processName)
-				m.onColorSwitch(true)
-			}
-		case processName := <-stopEvents:
-			logInfo("process stopped: %s (excepted: %v)", processName, isExceptedProcess(processName))
-			if isExceptedProcess(processName) {
-				stillRunning := anyExceptedProcessRunning()
-				logInfo("checking if other excepted processes running: %v", stillRunning)
-				if !stillRunning {
-					logInfo("game stopped: %s -> switching to 8-bit", processName)
-					m.onColorSwitch(false)
-				} else {
-					logInfo("game stopped: %s, but other excepted process still running", processName)
-				}
-			}
-		}
-	}
-}
-
-func (m *processMonitor) pollWMIEvents(enumerator *ole.IDispatch, out chan<- string) {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	if err := ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED); err != nil {
-		logError("COM init failed in event poller: %v", err)
-		return
-	}
-	defer ole.CoUninitialize()
+	m.trackRunningExceptedProcesses()
 
 	for {
 		select {
@@ -166,7 +125,7 @@ func (m *processMonitor) pollWMIEvents(enumerator *ole.IDispatch, out chan<- str
 		default:
 		}
 
-		eventRaw, err := oleCallMethod(enumerator, "NextEvent", 1000)
+		eventRaw, err := oleCallMethod(startEnum, "NextEvent", 1000)
 		if err != nil {
 			continue
 		}
@@ -175,17 +134,93 @@ func (m *processMonitor) pollWMIEvents(enumerator *ole.IDispatch, out chan<- str
 			continue
 		}
 
-		nameVariant, err := event.GetProperty("ProcessName")
+		pidVariant, err := event.GetProperty("ProcessID")
 		if err != nil {
 			event.Release()
 			continue
 		}
-
-		processName := nameVariant.ToString()
+		pid := uint32(pidVariant.Val)
 		event.Release()
 
-		if processName != "" {
-			out <- processName
+		fullName := getProcessNameByPID(pid)
+		if fullName != "" && isExceptedProcess(fullName) {
+			m.trackAndWatch(pid, fullName)
+		}
+	}
+}
+
+func (m *processMonitor) trackAndWatch(pid uint32, processName string) {
+	m.mu.Lock()
+	if _, already := m.activeGamePIDs[pid]; already {
+		m.mu.Unlock()
+		return
+	}
+	m.activeGamePIDs[pid] = processName
+	wasEmpty := len(m.activeGamePIDs) == 1
+	m.mu.Unlock()
+
+	if wasEmpty {
+		logInfo("game started: %s (PID %d) -> switching to 10-bit", processName, pid)
+		m.onColorSwitch(true)
+	} else {
+		logInfo("game started: %s (PID %d), already in 10-bit", processName, pid)
+	}
+
+	go m.waitForExit(pid, processName)
+}
+
+func (m *processMonitor) waitForExit(pid uint32, processName string) {
+	handle, _, _ := procOpenProcess.Call(synchronize, 0, uintptr(pid))
+	if handle == 0 {
+		logError("failed to open process %s (PID %d) for wait", processName, pid)
+		m.removeTrackedPID(pid, processName)
+		return
+	}
+	defer procCloseHandle.Call(handle)
+
+	procWaitForSingleObject.Call(handle, infinite)
+
+	m.removeTrackedPID(pid, processName)
+}
+
+func (m *processMonitor) removeTrackedPID(pid uint32, processName string) {
+	m.mu.Lock()
+	delete(m.activeGamePIDs, pid)
+	remaining := len(m.activeGamePIDs)
+	m.mu.Unlock()
+
+	if remaining == 0 {
+		logInfo("game exited: %s (PID %d) -> switching to 8-bit", processName, pid)
+		m.onColorSwitch(false)
+	} else {
+		logInfo("game exited: %s (PID %d), %d other game(s) still running", processName, pid, remaining)
+	}
+}
+
+func (m *processMonitor) trackRunningExceptedProcesses() {
+	snapshot, _, _ := procCreateToolhelp32Snap.Call(th32csSnapProcess, 0)
+	if snapshot == uintptr(syscall.InvalidHandle) {
+		return
+	}
+	defer procCloseHandle.Call(snapshot)
+
+	var entry processEntry32W
+	entry.Size = uint32(unsafe.Sizeof(entry))
+
+	ret, _, _ := procProcess32FirstW.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
+	if ret == 0 {
+		return
+	}
+
+	for {
+		processName := syscall.UTF16ToString(entry.ExeFile[:])
+		if isExceptedProcess(processName) {
+			m.trackAndWatch(entry.ProcessID, processName)
+		}
+		entry.Size = uint32(unsafe.Sizeof(entry))
+		ret, _, _ = procProcess32NextW.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
+		if ret == 0 {
+			break
 		}
 	}
 }
@@ -198,10 +233,10 @@ func oleCallMethod(disp *ole.IDispatch, method string, args ...any) (*ole.VARIAN
 	return result, nil
 }
 
-func anyExceptedProcessRunning() bool {
+func getProcessNameByPID(pid uint32) string {
 	snapshot, _, _ := procCreateToolhelp32Snap.Call(th32csSnapProcess, 0)
 	if snapshot == uintptr(syscall.InvalidHandle) {
-		return false
+		return ""
 	}
 	defer procCloseHandle.Call(snapshot)
 
@@ -210,23 +245,20 @@ func anyExceptedProcessRunning() bool {
 
 	ret, _, _ := procProcess32FirstW.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
 	if ret == 0 {
-		return false
+		return ""
 	}
 
 	for {
-		processName := syscall.UTF16ToString(entry.ExeFile[:])
-		if isExceptedProcess(processName) {
-			return true
+		if entry.ProcessID == pid {
+			return syscall.UTF16ToString(entry.ExeFile[:])
 		}
-
 		entry.Size = uint32(unsafe.Sizeof(entry))
 		ret, _, _ = procProcess32NextW.Call(snapshot, uintptr(unsafe.Pointer(&entry)))
 		if ret == 0 {
 			break
 		}
 	}
-
-	return false
+	return ""
 }
 
 func getRunningExceptedProcesses() []string {
