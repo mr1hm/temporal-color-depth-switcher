@@ -24,23 +24,11 @@ const (
 )
 
 const (
-	nvBPCDefault = 0
-	nvBPC6       = 1
-	nvBPC8       = 2
-	nvBPC10      = 3
-	nvBPC12      = 4
-	nvBPC16      = 5
-)
-
-const (
-	nvDesktopColorDepthDefault       = 0
-	nvDesktopColorDepth8BPC          = 1
-	nvDesktopColorDepth10BPC         = 2
-)
-
-const (
-	nvColorSelectionPolicyUser        = 0
-	nvColorSelectionPolicyBestQuality = 1
+	nvBPC6  = 1
+	nvBPC8  = 2
+	nvBPC10 = 3
+	nvBPC12 = 4
+	nvBPC16 = 5
 )
 
 const nvShortStringMax = 64
