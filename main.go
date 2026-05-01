@@ -83,12 +83,6 @@ func main() {
 		saveConfig()
 	}
 
-	if err := forceSetColorDepth(cfg.DisplayID, uint32(cfg.DefaultBPC), ); err != nil {
-		logError("failed to set initial color depth: %v", err)
-	} else {
-		logInfo("initial color depth set to %d-bit", bpcToHumanBits(cfg.DefaultBPC))
-	}
-
 	rebuildProcessCache()
 
 	if running := getRunningExceptedProcesses(); len(running) > 0 {
