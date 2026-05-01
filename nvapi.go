@@ -245,7 +245,3 @@ func setColorDepth(displayID uint32, bpc uint32) error {
 	return nil
 }
 
-func forceSetColorDepth(displayID uint32, bpc uint32) error {
-	nvapi.isCurrently10Bit = !(bpc == nvBPC10)
-	return setColorDepth(displayID, bpc)
-}

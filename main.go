@@ -133,10 +133,14 @@ func main() {
 		defaultBPC := cfg.DefaultBPC
 		configMu.Unlock()
 
-		if err := forceSetColorDepth(displayID, uint32(defaultBPC), ); err != nil {
-			logError("failed to restore color depth on exit: %v", err)
+		if nvapi.isCurrently10Bit {
+			if err := setColorDepth(displayID, uint32(defaultBPC)); err != nil {
+				logError("failed to restore color depth on exit: %v", err)
+			} else {
+				logInfo("restored %d-bit color depth", bpcToHumanBits(defaultBPC))
+			}
 		} else {
-			logInfo("restored %d-bit color depth", bpcToHumanBits(defaultBPC))
+			logInfo("already at 8-bit, no change needed on exit")
 		}
 
 		unloadNvAPI()
