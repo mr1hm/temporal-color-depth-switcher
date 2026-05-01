@@ -167,6 +167,7 @@ func setupLogging() {
 		logger = log.New(os.Stderr, "", log.LstdFlags)
 		return
 	}
+	redirectStderr(logFile)
 	logger = log.New(logFile, "", log.LstdFlags)
 }
 

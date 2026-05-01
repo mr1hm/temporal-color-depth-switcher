@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole/oleutil"
 )
 
 var (
@@ -59,6 +60,12 @@ func (m *processMonitor) stop() {
 }
 
 func (m *processMonitor) run() {
+	defer func() {
+		if r := recover(); r != nil {
+			logError("process monitor panic: %v", r)
+		}
+	}()
+
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
@@ -68,20 +75,21 @@ func (m *processMonitor) run() {
 	}
 	defer ole.CoUninitialize()
 
-	locator, err := ole.CreateInstance(
-		ole.NewGUID("{4590F811-1D3A-11D0-891F-00AA004B2E24}"), // CLSID_WbemLocator
-		ole.NewGUID("{DC12A687-737F-11CF-884D-00AA004B2E24}"), // IID_IWbemLocator
-	)
+	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
 	if err != nil {
-		logError("WbemLocator creation failed: %v", err)
+		logError("SWbemLocator creation failed: %v", err)
+		return
+	}
+	defer unknown.Release()
+
+	locator, err := unknown.QueryInterface(ole.IID_IDispatch)
+	if err != nil {
+		logError("SWbemLocator QueryInterface failed: %v", err)
 		return
 	}
 	defer locator.Release()
 
-	locatorDisp := locator.MustQueryInterface(ole.IID_IDispatch)
-	defer locatorDisp.Release()
-
-	serviceRaw, err := oleCallMethod(locatorDisp, "ConnectServer", `ROOT\CIMV2`)
+	serviceRaw, err := oleCallMethod(locator, "ConnectServer", ".", `ROOT\CIMV2`)
 	if err != nil {
 		logError("WMI ConnectServer failed: %v", err)
 		return
