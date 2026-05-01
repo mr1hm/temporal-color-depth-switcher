@@ -52,9 +52,40 @@ type nvColorDataV5 struct {
 const nvColorDataV5Version = uint32(24 | (5 << 16)) // MAKE_NVAPI_VERSION(NV_COLOR_DATA_V5, 5)
 
 type DisplayInfo struct {
-	Index     int
-	DisplayID uint32
-	Name      string
+	Index       int
+	DisplayID   uint32
+	Name        string
+	MonitorName string
+}
+
+var (
+	procEnumDisplayDevices = modUser32.NewProc("EnumDisplayDevicesW")
+)
+
+type displayDeviceW struct {
+	Size         uint32
+	DeviceName   [32]uint16
+	DeviceString [128]uint16
+	StateFlags   uint32
+	DeviceID     [128]uint16
+	DeviceKey    [128]uint16
+}
+
+func getMonitorName(adapterName string) string {
+	adapterPtr, _ := syscall.UTF16PtrFromString(adapterName)
+	var device displayDeviceW
+	device.Size = uint32(unsafe.Sizeof(device))
+
+	ret, _, _ := procEnumDisplayDevices.Call(
+		uintptr(unsafe.Pointer(adapterPtr)),
+		0,
+		uintptr(unsafe.Pointer(&device)),
+		0,
+	)
+	if ret == 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(device.DeviceString[:])
 }
 
 type nvAPIState struct {
@@ -182,10 +213,13 @@ func enumerateDisplays() ([]DisplayInfo, error) {
 			continue
 		}
 
+		monitorName := getMonitorName(name)
+
 		displays = append(displays, DisplayInfo{
-			Index:     int(i),
-			DisplayID: displayID,
-			Name:      name,
+			Index:       int(i),
+			DisplayID:   displayID,
+			Name:        name,
+			MonitorName: monitorName,
 		})
 	}
 

@@ -73,7 +73,7 @@ func main() {
 	}
 	logInfo("found %d display(s)", len(displays))
 	for _, d := range displays {
-		logInfo("  display: %s (ID: %d)", d.Name, d.DisplayID)
+		logInfo("  display: %s - %s (ID: %d)", d.Name, d.MonitorName, d.DisplayID)
 	}
 
 	if cfg.DisplayID == 0 || !isValidDisplayID(cfg.DisplayID) {

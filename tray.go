@@ -64,7 +64,11 @@ func onTrayReady() {
 	displayMenu := systray.AddMenuItem("Display", "Select display")
 	displayItems = make([]*systray.MenuItem, len(displays))
 	for i, d := range displays {
-		displayItems[i] = displayMenu.AddSubMenuItem(d.Name, fmt.Sprintf("Switch on %s", d.Name))
+		label := d.Name
+		if d.MonitorName != "" {
+			label = fmt.Sprintf("%s (%s)", d.Name, d.MonitorName)
+		}
+		displayItems[i] = displayMenu.AddSubMenuItem(label, fmt.Sprintf("Switch on %s", label))
 		if d.DisplayID == cfg.DisplayID {
 			displayItems[i].Check()
 		}

@@ -128,13 +128,17 @@ func (m *processMonitor) run() {
 		case <-m.quit:
 			return
 		case processName := <-startEvents:
+			logInfo("process started: %s (excepted: %v)", processName, isExceptedProcess(processName))
 			if isExceptedProcess(processName) {
 				logInfo("game started: %s -> switching to 10-bit", processName)
 				m.onColorSwitch(true)
 			}
 		case processName := <-stopEvents:
+			logInfo("process stopped: %s (excepted: %v)", processName, isExceptedProcess(processName))
 			if isExceptedProcess(processName) {
-				if !anyExceptedProcessRunning() {
+				stillRunning := anyExceptedProcessRunning()
+				logInfo("checking if other excepted processes running: %v", stillRunning)
+				if !stillRunning {
 					logInfo("game stopped: %s -> switching to 8-bit", processName)
 					m.onColorSwitch(false)
 				} else {
