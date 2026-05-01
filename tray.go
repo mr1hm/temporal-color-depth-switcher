@@ -199,10 +199,23 @@ func updateStatusText(is10Bit bool, gameName string) {
 	}
 }
 
+func buildDoubleNullFilter(parts []string) []uint16 {
+	var result []uint16
+	for _, part := range parts {
+		encoded, _ := syscall.UTF16FromString(part)
+		result = append(result, encoded...)
+	}
+	result = append(result, 0)
+	return result
+}
+
 func openFileDialog() string {
 	var fileBuf [maxPath]uint16
 
-	filter, _ := syscall.UTF16FromString("Executables (*.exe)\x00*.exe\x00All Files (*.*)\x00*.*\x00\x00")
+	filter := buildDoubleNullFilter([]string{
+		"Executables (*.exe)", "*.exe",
+		"All Files (*.*)", "*.*",
+	})
 	title, _ := syscall.UTF16FromString("Select Game Executable")
 
 	ofn := openFileName{
