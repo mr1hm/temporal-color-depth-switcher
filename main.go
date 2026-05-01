@@ -144,6 +144,7 @@ func main() {
 
 		onTrayExit()
 	})
+	logInfo("systray.Run returned unexpectedly")
 }
 
 func enforceSingleInstance() bool {
