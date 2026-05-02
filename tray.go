@@ -152,8 +152,14 @@ func handleDisplaySelect(index int, display DisplayInfo) {
 			logError("failed to save display selection: %v", err)
 		}
 
-		nvapi.isCurrently10Bit = !nvapi.isCurrently10Bit
-		logInfo("display changed to %s (ID: %d)", display.Name, display.DisplayID)
+		colorData, err := getColorData(display.DisplayID)
+		if err != nil {
+			logError("failed to read color data for new display: %v", err)
+			nvapi.isCurrently10Bit = false
+		} else {
+			nvapi.isCurrently10Bit = (colorData.BPC == nvBPC10)
+		}
+		logInfo("display changed to %s (ID: %d), currently 10-bit: %v", display.Name, display.DisplayID, nvapi.isCurrently10Bit)
 	}
 }
 

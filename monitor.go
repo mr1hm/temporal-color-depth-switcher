@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/go-ole/go-ole"
@@ -140,9 +141,15 @@ func (m *processMonitor) run() {
 			continue
 		}
 		pid := uint32(pidVariant.Val)
+
+		nameVariant, _ := event.GetProperty("ProcessName")
+		eventName := ""
+		if nameVariant != nil && nameVariant.Val != 0 {
+			eventName = nameVariant.ToString()
+		}
 		event.Release()
 
-		fullName := getProcessNameByPID(pid)
+		fullName := resolveProcessName(pid, eventName)
 		if fullName != "" && isExceptedProcess(fullName) {
 			m.trackAndWatch(pid, fullName)
 		}
@@ -223,6 +230,22 @@ func (m *processMonitor) trackRunningExceptedProcesses() {
 			break
 		}
 	}
+}
+
+func resolveProcessName(pid uint32, eventName string) string {
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(50 * time.Millisecond)
+		}
+		if name := getProcessNameByPID(pid); name != "" {
+			return name
+		}
+	}
+	if eventName != "" {
+		logInfo("snapshot lookup failed for PID %d, using WMI event name: %s", pid, eventName)
+		return eventName
+	}
+	return ""
 }
 
 func oleCallMethod(disp *ole.IDispatch, method string, args ...any) (*ole.VARIANT, error) {

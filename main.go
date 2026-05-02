@@ -87,7 +87,7 @@ func main() {
 
 	if running := getRunningExceptedProcesses(); len(running) > 0 {
 		logInfo("excepted process already running: %s -> switching to 10-bit", strings.Join(running, ", "))
-		if err := setColorDepth(cfg.DisplayID, uint32(cfg.GameBPC), ); err != nil {
+		if err := setColorDepth(cfg.DisplayID, uint32(cfg.GameBPC)); err != nil {
 			logError("failed to switch to game color depth: %v", err)
 		}
 		updateStatusText(true, running[0])
@@ -101,7 +101,7 @@ func main() {
 		configMu.Unlock()
 
 		if enable10Bit {
-			if err := setColorDepth(displayID, uint32(gameBPC), ); err != nil {
+			if err := setColorDepth(displayID, uint32(gameBPC)); err != nil {
 				logError("failed to switch to 10-bit: %v", err)
 			}
 			running := getRunningExceptedProcesses()
@@ -111,7 +111,7 @@ func main() {
 			}
 			updateStatusText(true, gameName)
 		} else {
-			if err := setColorDepth(displayID, uint32(defaultBPC), ); err != nil {
+			if err := setColorDepth(displayID, uint32(defaultBPC)); err != nil {
 				logError("failed to switch to 8-bit: %v", err)
 			}
 			updateStatusText(false, "")
